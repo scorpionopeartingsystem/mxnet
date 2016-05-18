@@ -478,6 +478,7 @@ class Symbol(object):
             keys = []
             for k, v in kwargs.items():
                 if isinstance(v, tuple):
+                    print k, v
                     keys.append(c_str(k))
                     sdata.extend(v)
                     indptr.append(len(sdata))

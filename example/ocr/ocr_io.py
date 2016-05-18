@@ -34,43 +34,47 @@ def gen_rand():
     return buf
 
 def get_label(buf):
-    ret = np.zeros((len(buf), 10))
-    k = 0
-    for c in buf:
-        c = int(c)
-        ret[k][c] = 1.
-        k += 1
-    return k
+    ret = np.zeros(4, dtype=np.int)
+    for i in range(4):
+        ret[i] = int(buf[i])
+    return ret
 
 class OCRIter(mx.io.DataIter):
-    def __init__(self, batch_size,
+    def __init__(self, count, batch_size, init_states,
                  data_name='data', label_name='label'):
         super(OCRIter, self).__init__()
-        self.captcha = ImageCaptcha(fonts=['/Library/Fonts/Skia.ttf'])
+        self.captcha = ImageCaptcha(fonts=['./data/OpenSans-Regular.ttf'])
         self.batch_size = batch_size
-
-        self.provide_data = [('data', (batch_size))]
-        self.provide_label = [('softmax_label', (self.batch_size))]
+        self.count = count
+        self.init_states = init_states
+        self.init_state_arrays = [mx.nd.zeros(x[1]) for x in init_states]
+        self.provide_data = [('data', (batch_size, 30 * 80))] + init_states
+        self.provide_label = [('softmax_label', (self.batch_size, 4))]
 
     def __iter__(self):
-        data = []
-        label = []
-        for i in range(self.batch_size):
-            num = gen_rand()
-            img = self.captcha.generate(num)
-            img = np.fromstring(data.getvalue(), dtype='uint8')
-            img = cv2.imdecode(img, cv2.IMREAD_COLOR)
-            data.append(img)
-            label.append(get_label(num))
+        init_state_names = [x[0] for x in self.init_states]
+        for k in range(self.count):
+            data = []
+            label = []
+            for i in range(self.batch_size):
+                num = gen_rand()
+                img = self.captcha.generate(num)
+                img = np.fromstring(img.getvalue(), dtype='uint8')
+                img = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+                img = cv2.resize(img, (80, 30))
+                img = img.transpose(1, 0)
+                img = img.reshape((80 * 30))
+                img = np.multiply(img, 1/255.0)
+                data.append(img)
+                label.append(get_label(num))
 
-        data_all = [mx.nd.array(data)]
-        label_all = [mx.nd.array(label)]
-        data_names = ['data']
-        label_names = ['softmax_label']
-
-        data_batch = SimpleBatch(data_names, data_all, label_names, label_all,
-                                 self.buckets[i_bucket])
-        yield data_batch
+            data_all = [mx.nd.array(data)] + self.init_state_arrays
+            label_all = [mx.nd.array(label)]
+            data_names = ['data'] + init_state_names
+            label_names = ['softmax_label']
+            
+            data_batch = SimpleBatch(data_names, data_all, label_names, label_all)
+            yield data_batch
 
     def reset(self):
         pass

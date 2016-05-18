@@ -31,35 +31,38 @@ def CRPS(label, pred):
     ret = 0
     n = 0
     for i in range(pred.shape[0]):
+        ok = True
         for j in range(4):
             start = j * 10
             end = j * 10 + 10
-            if np.argmax(pred[i][start:end]) == np.argmax(label[i][start:end]):
-                ret += 1.0
-            n += 1.0
+            if np.argmax(pred[i][start:end]) != np.argmax(label[i][start:end]):
+                ok = False
+                break
+        n += 1.0
+        if ok:
+            ret += 1.0
     return ret / n
-    #for i in range(pred.shape[0]):
-    #    for j in range(pred.shape[1] - 1):
-    #        if pred[i, j] > pred[i, j + 1]:
-    #            pred[i, j + 1] = pred[i, j]
-    #return np.sum(np.square(label - pred)) / label.size    
     
 network = get_ocrnet()
 devs = [mx.gpu(0)]
 model = mx.model.FeedForward(ctx = devs,
                              symbol = network,
-                             num_epoch = 5,
+                             num_epoch = 15,
                              learning_rate = 0.001,
                              wd = 0.00001,
                              initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                              momentum = 0.9)
+"""
 data_train = mx.io.ImageRecordIter(
     batch_size=32,
     path_imgrec="data/train.bin",
     data_shape=(3,60,160),
     path_imglist="data/train.list",
-    label_width=40
+    label_width=40,
+    scale = 0.00390625
 )
+"""
+data_train = OCRIter(100000, 32)
 
 
 import logging

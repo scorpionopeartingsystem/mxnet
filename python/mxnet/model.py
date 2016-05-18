@@ -740,7 +740,8 @@ class FeedForward(BASE_ESTIMATOR):
             self.symbol = self.sym_gen(data.default_bucket_key) # pylint: disable=no-member
             self._check_arguments()
         self.kwargs["sym"] = self.symbol
-
+        
+        print dict(data.provide_data+data.provide_label)
         arg_names, param_names, aux_names = \
                 self._init_params(dict(data.provide_data+data.provide_label))
         param_idx2name = {}
