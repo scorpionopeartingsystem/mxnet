@@ -34,7 +34,7 @@ class DataIter(mx.io.DataIter):
                 continue
             self.data.append((int(tks[0]), int(tks[1]), float(tks[2])))
         self.provide_data = [('user', (batch_size, 1)), ('item', (batch_size, 1))]
-        self.provide_label = [('score', (self.batch_size, 1))]
+        self.provide_label = [('score', (self.batch_size, ))]
         
     def __iter__(self):
         for k in range(len(self.data) / self.batch_size):
@@ -67,12 +67,11 @@ def get_net(max_user, max_item):
 
     user = mx.symbol.Embedding(data = user, input_dim = max_user, output_dim = 100)
     user = mx.symbol.Flatten(data = user)
-    #user = mx.symbol.transpose(data = user)
+    user = mx.symbol.transpose(data = user)
     item = mx.symbol.Embedding(data = item, input_dim = max_item, output_dim = 100)
     item = mx.symbol.Flatten(data = item)
-    ui = mx.symbol.Concat(*[user, item], dim = 1)
-    #pred = mx.symbol.dot(lhs = item, rhs = user)
-    pred = mx.symbol.FullyConnected(data = ui, num_hidden = 1)
+    pred = mx.symbol.dot(lhs = item, rhs = user)
+    pred = mx.symbol.FullyConnected(data = pred, num_hidden = 1)
     pred = mx.symbol.LinearRegressionOutput(data = pred, label = score)
     return pred
 
@@ -103,7 +102,7 @@ if __name__ == '__main__':
                                  initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                                  momentum = 0.9)
     
-    batch_size = 32
+    batch_size = 4
     data_train = DataIter('./data/u.train', batch_size)
     data_test = DataIter('./data/u.test', batch_size)
     

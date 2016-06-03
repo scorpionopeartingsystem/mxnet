@@ -225,7 +225,7 @@ void ScalarOp(const NDArray &lhs,
 
 void CopyFromTo(const NDArray &from, NDArray *to, int priority) {
   CHECK(from.shape() == to->shape())
-      << "operands shape mismatch";
+    << "operands shape mismatch" << from.shape() << "\t" << to->shape();
   CHECK(from.shape().ndim() != 0)
       << "source operands have zero dimension shape";
   // important: callback must always capture by value
