@@ -4,7 +4,7 @@ import sys
 sys.path.insert(0, "../../python")
 import mxnet as mx
 import numpy as np
-import cv2, random
+import cv2, random, math
 from io import BytesIO
 from captcha.image import ImageCaptcha
 
@@ -33,7 +33,7 @@ class DataIter(mx.io.DataIter):
             if len(tks) != 4:
                 continue
             self.data.append((int(tks[0]), int(tks[1]), float(tks[2])))
-        self.provide_data = [('user', (batch_size, 1)), ('item', (batch_size, 1))]
+        self.provide_data = [('user', (batch_size, )), ('item', (batch_size, ))]
         self.provide_label = [('score', (self.batch_size, ))]
         
     def __iter__(self):
@@ -48,7 +48,6 @@ class DataIter(mx.io.DataIter):
                 items.append(item)
                 scores.append(score)
                 
-            print users, items, scores
             data_all = [mx.nd.array(users), mx.nd.array(items)]
             label_all = [mx.nd.array(scores)]
             data_names = ['user', 'item']
@@ -67,10 +66,17 @@ def get_net(max_user, max_item):
 
     user = mx.symbol.Embedding(data = user, input_dim = max_user, output_dim = 100)
     user = mx.symbol.Flatten(data = user)
-    user = mx.symbol.transpose(data = user)
+    user = mx.symbol.FullyConnected(data = user, num_hidden = 100)
+    user = mx.symbol.Activation(data = user, act_type = "relu")
+    #user = mx.symbol.transpose(data = user)
     item = mx.symbol.Embedding(data = item, input_dim = max_item, output_dim = 100)
     item = mx.symbol.Flatten(data = item)
-    pred = mx.symbol.dot(lhs = item, rhs = user)
+    item = mx.symbol.FullyConnected(data = item, num_hidden = 100)
+    item = mx.symbol.Activation(data = item, act_type = "relu")
+    #pred = mx.symbol.dot(lhs = item, rhs = user)
+    pred = mx.symbol.Concat(*[user, item], dim = 1)
+    pred = mx.symbol.FullyConnected(data = pred, num_hidden = 100)
+    pred = mx.symbol.Activation(data = pred, act_type = "relu")
     pred = mx.symbol.FullyConnected(data = pred, num_hidden = 1)
     pred = mx.symbol.LinearRegressionOutput(data = pred, label = score)
     return pred
@@ -87,7 +93,13 @@ def max_id(fname):
     return mu + 1, mi + 1
 
 def RMSE(label, pred):
-    return 0.0
+    ret = 0.0
+    n = 0.0
+    pred = pred.flatten()
+    for i in range(len(label)):
+        ret += (label[i] - pred[i]) * (label[i] - pred[i])
+        n += 1.0
+    return math.sqrt(ret / n)
 
 if __name__ == '__main__':
     max_user, max_item = max_id('./data/u.data')
@@ -96,13 +108,13 @@ if __name__ == '__main__':
     devs = [mx.gpu(i) for i in range(1)]
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
-                                 num_epoch = 1,
+                                 num_epoch = 100,
                                  learning_rate = 0.001,
                                  wd = 0.00001,
                                  initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                                  momentum = 0.9)
     
-    batch_size = 4
+    batch_size = 32
     data_train = DataIter('./data/u.train', batch_size)
     data_test = DataIter('./data/u.test', batch_size)
     
