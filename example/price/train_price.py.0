@@ -1,0 +1,205 @@
+# pylint: disable=C0111,too-many-arguments,too-many-instance-attributes,too-many-locals,redefined-outer-name,fixme
+# pylint: disable=superfluous-parens, no-member, invalid-name
+import sys, datetime, math, random
+sys.path.insert(0, "../../python")
+import mxnet as mx
+import numpy as np
+from io import BytesIO
+from captcha.image import ImageCaptcha
+
+class Batch(object):
+    def __init__(self, data_names, data, label_names, label):
+        self.data = data
+        self.label = label
+        self.data_names = data_names
+        self.label_names = label_names
+
+    @property
+    def provide_data(self):
+        return [(n, x.shape) for n, x in zip(self.data_names, self.data)]
+
+    @property
+    def provide_label(self):
+        return [(n, x.shape) for n, x in zip(self.label_names, self.label)]
+
+def process_line(line):
+    price, deal_price, car_id, minor_category_name, license_date, license_month, road_haul, city_id, pinpai, chexi, chexing = line.strip('\n').split('\t')
+    deal_price = float(deal_price)
+    price = float(price)
+    ratio = min(price, deal_price) / max(price, deal_price)
+    #if deal_price > 0 and ratio > 0.9:
+    #    price = deal_price
+    date_delta = datetime.date.today() - datetime.date(int(license_date),int(license_month),15)
+    vehicle_age = date_delta.days
+    pinpai = pinpai.replace(" ", "").replace(":", "")
+    chexi = chexi.replace(" ", "").replace(":", "")
+    chexi = pinpai + "_" + chexi
+    chexing = chexing.replace(" ", "").replace(":", "")
+    chexing = chexi + "_" + chexing
+    vehicle_age /= 365.0
+    road_haul = float(road_haul) / 10000.0
+    return price / 10000.0, vehicle_age, pinpai, chexi, chexing, road_haul, city_id
+
+def insert_vocab(a, b):
+    if b not in a:
+        a[b] = len(a)
+
+def build_vocab(fname):
+    vpinpai = {}
+    vchexi = {}
+    vchexing = {}
+    vcity = {}
+    for line in file(fname):
+        price, vehicle_age, pinpai, chexi, chexing, road_haul, city_id = process_line(line)
+        insert_vocab(vpinpai, pinpai)
+        insert_vocab(vchexi, chexi)
+        insert_vocab(vchexing, chexing)
+        insert_vocab(vcity, city_id)
+    return vpinpai, vchexi, vchexing, vcity
+
+class PriceIter(mx.io.DataIter):
+    def __init__(self, fname, batch_size, vpinpai, vchexi, vchexing, vcity):
+        super(PriceIter, self).__init__()
+        self.batch_size = batch_size
+        self.is_train = False
+        if fname.startswith("train"):
+            self.is_train = True
+        self.city = []
+        self.pinpai = []
+        self.chexi = []
+        self.chexing = []
+        self.cdata = []
+        self.pinpai_vocab = vpinpai
+        self.chexi_vocab = vchexi
+        self.chexing_vocab = vchexing
+        self.city_vocab = vcity
+        self.price = []
+        for line in file(fname):
+            price, vehicle_age, pinpai, chexi, chexing, road_haul, city_id = process_line(line)
+            self.cdata.append(np.array([vehicle_age, float(road_haul)]))
+            self.pinpai.append(np.array([self.pinpai_vocab[pinpai]], dtype=np.int))
+            self.chexi.append(np.array([self.chexi_vocab[chexi]], dtype=np.int))
+            self.chexing.append(np.array([self.chexing_vocab[chexing]], dtype=np.int))
+            self.city.append(np.array([self.city_vocab[city_id]], dtype=np.int))
+            self.price.append(price)
+
+        self.provide_data = [('cdata', (batch_size, 2)),
+                             ('pinpai', (batch_size, 1)),
+                             ('chexi', (batch_size, 1)),
+                             ('chexing', (batch_size, 1)),
+                             ('city', (batch_size, 1))]
+        self.provide_label = [('price', (self.batch_size, ))]
+
+    def __iter__(self):
+        count = len(self.price)
+        for i in range(count / self.batch_size):
+            bcdata = []
+            bcity = []
+            bpinpai = []
+            bchexi = []
+            bchexing = []
+            blabel = []
+            for j in range(self.batch_size):
+                k = (i * self.batch_size + j)
+                if self.is_train:
+                    k = random.randint(0, count - 1)
+                bcdata.append(self.cdata[k])
+                bcity.append(self.city[k])
+                bpinpai.append(self.pinpai[k])
+                bchexi.append(self.chexi[k])
+                bchexing.append(self.chexing[k])
+                blabel.append(self.price[k])
+
+            data_all = [mx.nd.array(bcdata),
+                        mx.nd.array(bpinpai),
+                        mx.nd.array(bchexi),
+                        mx.nd.array(bchexing),
+                        mx.nd.array(bcity)
+            ]
+            label_all = [mx.nd.array(blabel)]
+            data_names = ['cdata', 'pinpai', 'chexi' 'chexing', 'city']
+            label_names = ['price']
+            
+            data_batch = Batch(data_names, data_all, label_names, label_all)
+            yield data_batch
+
+    def reset(self):
+        pass
+
+def get_net(pinpai_size, pinpai_embed_size, 
+            chexi_size, chexi_embed_size,
+            chexing_size, chexing_embed_size,
+            city_size, city_embed_size):
+    cdata = mx.symbol.Variable('cdata')
+    pinpai = mx.symbol.Variable('pinpai')
+    price = mx.symbol.Variable('price')
+    chexi = mx.symbol.Variable('chexi')
+    chexing = mx.symbol.Variable('chexing')
+    city = mx.symbol.Variable('city')
+
+    cdata = mx.symbol.Flatten(data = cdata)
+    pinpai_embed = mx.symbol.Embedding(data = pinpai, input_dim = pinpai_size,
+                                       output_dim = pinpai_embed_size)
+    pinpai_flatten = mx.symbol.Flatten(pinpai_embed)
+
+    chexi_embed = mx.symbol.Embedding(data = chexi, input_dim = chexi_size, 
+                                      output_dim = chexi_embed_size)
+    chexi_flatten = mx.symbol.Flatten(chexi_embed)
+
+    chexing_embed = mx.symbol.Embedding(data = chexing, input_dim = chexing_size,
+                                        output_dim = chexing_embed_size)
+    chexing_flatten = mx.symbol.Flatten(chexing_embed)
+
+    city_embed = mx.symbol.Embedding(data = city, input_dim = city_size, 
+                                     output_dim = city_embed_size)
+    city_flatten = mx.symbol.Flatten(city_embed)
+
+    net = mx.symbol.Concat(*[cdata, pinpai_flatten, chexi_flatten, 
+                             chexing_flatten, city_flatten], dim = 1)
+    net = mx.symbol.FullyConnected(data = net, num_hidden = 100)
+    net = mx.symbol.Activation(data = net, act_type="relu")
+    net = mx.symbol.FullyConnected(data = net, num_hidden = 100)
+    net = mx.symbol.Activation(data = net, act_type="relu")
+    net = mx.symbol.FullyConnected(data = net, num_hidden = 100)
+    net = mx.symbol.Activation(data = net, act_type="relu")
+    net = mx.symbol.FullyConnected(data = net, num_hidden = 100)
+    net = mx.symbol.Activation(data = net, act_type="relu")
+    net = mx.symbol.FullyConnected(data = net, num_hidden = 1)
+    net = mx.symbol.LinearRegressionOutput(data = net, label = price)
+    return net
+
+def RMSE(label, pred):
+    ret = 0.0
+    n = 0.0
+    for k in range(pred.shape[0]):
+        v1 = label[k]
+        v2 = pred[k][0]
+        ret += abs(v1 - v2) / v1
+        n += 1.0
+    return ret / n
+
+vpinpai, vchexi, vchexing, vcity = build_vocab("price0.tsv")
+data_train = PriceIter("train.tsv", 100, vpinpai, vchexi, vchexing, vcity)
+data_test = PriceIter("test.tsv", 100, vpinpai, vchexi, vchexing, vcity)
+print len(data_train.pinpai_vocab)
+network = get_net(pinpai_size = len(data_train.pinpai_vocab), pinpai_embed_size = 100,
+                  chexi_size = len(data_train.chexi_vocab), chexi_embed_size = 150,
+                  chexing_size = len(data_train.chexing_vocab), chexing_embed_size = 200,
+                  city_size = len(data_train.city_vocab), city_embed_size = 300)
+
+devs = [mx.gpu(i) for i in range(1)]
+model = mx.model.FeedForward(ctx = devs,
+                             symbol = network,
+                             num_epoch = 30,
+                             learning_rate = 0.0001,
+                             wd = 0.0001,
+                             lr_scheduler=mx.misc.FactorScheduler(2000,0.9),
+                             initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
+                             momentum = 0.9)
+
+
+import logging
+head = '%(asctime)-15s %(message)s'
+logging.basicConfig(level=logging.DEBUG, format=head)
+
+model.fit(X = data_train, eval_data = data_test, eval_metric = mx.metric.np(RMSE), batch_end_callback=mx.callback.Speedometer(32, 50),)

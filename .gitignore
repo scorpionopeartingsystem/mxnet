@@ -84,6 +84,11 @@ R-package/man/*.Rd
 *ubyte
 *.bin
 *.txt
+*.tsv
+*.test
+*.train
+*.t
+*.vocab
 
 # ipython notebook
 *_pb2.py

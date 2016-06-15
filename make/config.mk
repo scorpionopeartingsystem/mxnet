@@ -38,15 +38,15 @@ ADD_CFLAGS =
 #---------------------------------------------
 
 # whether use CUDA during compile
-USE_CUDA = 0
+USE_CUDA = 1
 
 # add the path to CUDA library to link and compile flag
 # if you have already add them to environment variable, leave it as NONE
-# USE_CUDA_PATH = /usr/local/cuda
-USE_CUDA_PATH = NONE
+USE_CUDA_PATH = /usr/local/cuda
+# USE_CUDA_PATH = NONE
 
 # whether use CuDNN R3 library
-USE_CUDNN = 0
+USE_CUDNN = 1
 
 # whether use cuda runtime compiling for writing kernels in native language (i.e. Python)
 USE_NVRTC = 0
@@ -115,6 +115,9 @@ EXTRA_OPERATORS =
 # You also need to add TORCH_PATH/install/lib to your LD_LIBRARY_PATH
 # TORCH_PATH = $(HOME)/torch
 # MXNET_PLUGINS += plugin/torch/torch.mk
+
+# WARPCTC_PATH = /dl/code/warp-ctc
+# MXNET_PLUGINS += plugin/warpctc/warpctc.mk
 
 # whether to use sframe integration. This requires build sframe
 # git@github.com:dato-code/SFrame.git
