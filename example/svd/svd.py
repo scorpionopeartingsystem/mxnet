@@ -60,24 +60,20 @@ class DataIter(mx.io.DataIter):
         pass
 
 def get_net(max_user, max_item):
+    hidden = 500
     user = mx.symbol.Variable('user')
     item = mx.symbol.Variable('item')
     score = mx.symbol.Variable('score')
 
-    user = mx.symbol.Embedding(data = user, input_dim = max_user, output_dim = 100)
+    user = mx.symbol.Embedding(data = user, input_dim = max_user, output_dim = 1000)
     user = mx.symbol.Flatten(data = user)
-    user = mx.symbol.FullyConnected(data = user, num_hidden = 100)
-    user = mx.symbol.Activation(data = user, act_type = "relu")
-    #user = mx.symbol.transpose(data = user)
-    item = mx.symbol.Embedding(data = item, input_dim = max_item, output_dim = 100)
+    user = mx.symbol.FullyConnected(data = user, num_hidden = hidden)
+    item = mx.symbol.Embedding(data = item, input_dim = max_item, output_dim = 1000)
+    item = mx.symbol.FullyConnected(data = item, num_hidden = hidden)
     item = mx.symbol.Flatten(data = item)
-    item = mx.symbol.FullyConnected(data = item, num_hidden = 100)
-    item = mx.symbol.Activation(data = item, act_type = "relu")
-    #pred = mx.symbol.dot(lhs = item, rhs = user)
-    pred = mx.symbol.Concat(*[user, item], dim = 1)
-    pred = mx.symbol.FullyConnected(data = pred, num_hidden = 100)
-    pred = mx.symbol.Activation(data = pred, act_type = "relu")
-    pred = mx.symbol.FullyConnected(data = pred, num_hidden = 1)
+    pred = user * item
+    pred = mx.symbol.sum_axis(data = pred, axis = 1)
+    pred = mx.symbol.Flatten(data = pred)
     pred = mx.symbol.LinearRegressionOutput(data = pred, label = score)
     return pred
 
@@ -109,12 +105,12 @@ if __name__ == '__main__':
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
                                  num_epoch = 100,
-                                 learning_rate = 0.001,
-                                 wd = 0.00001,
+                                 learning_rate = 0.002,
+                                 wd = 0.0001,
                                  initializer = mx.init.Xavier(factor_type="in", magnitude=2.34),
                                  momentum = 0.9)
     
-    batch_size = 32
+    batch_size = 8
     data_train = DataIter('./data/u.train', batch_size)
     data_test = DataIter('./data/u.test', batch_size)
     
