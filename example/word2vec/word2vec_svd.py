@@ -27,6 +27,9 @@ def read_text8():
         tks = f.read().split(' ')
         freq = {}
         for tk in tks:
+            tk = tk.strip()
+            if len(tk) == 0:
+                continue
             if tk not in freq:
                 freq[tk] = 1
             else:
@@ -36,13 +39,14 @@ def read_text8():
         for k, v in sorted(freq.items(), key = itemgetter(1), reverse = True):
             vocab[k] = n
             n += 1
-        return vocab, freq, [vocab[x] for x in tks]
+        return vocab, freq, [vocab[x] for x in tks if len(x.strip()) > 0]
 
 class DataIter(mx.io.DataIter):
     def __init__(self, fname, batch_size, win_size):
         super(DataIter, self).__init__()
         self.batch_size = batch_size
         self.vocab, self.freq, self.data = read_text8()
+        print len(self.data), self.data[:100]
         self.vocab_size = len(self.vocab)
         self.provide_data = [('context', (batch_size, win_size * 2)), \
                              ('target', (batch_size, 1))]
@@ -97,16 +101,15 @@ def get_net(win_size, vocab_size):
     for i in range(win_size * 2):
         context_vec.append(context_words[i])
     context_vec = mx.symbol.ElementWiseSum(*context_vec)
-    context_vec = context_vec
     context_vec = mx.symbol.Flatten(data = context_vec)
-    context_vec = mx.symbol.FullyConnected(data = context_vec, num_hidden = 200)
+    #context_vec = mx.symbol.FullyConnected(data = context_vec, num_hidden = 200)
 
     target = mx.symbol.Embedding(data = target, input_dim = vocab_size,
                                  output_dim = 200)
     target = mx.symbol.Flatten(data = target)
-    target = mx.symbol.FullyConnected(data = target, num_hidden = 200)
+    #target = mx.symbol.FullyConnected(data = target, num_hidden = 200)
     pred = context_vec * target
-    pred = mx.symbol.sum(data = pred, axis = 1, keepdims = True)
+    pred = mx.symbol.sum(data = pred, axis = 1)
     pred = mx.symbol.Flatten(data = pred)
     pred = mx.symbol.LogisticRegressionOutput(data = pred, label = label)
     return pred
@@ -127,13 +130,13 @@ def AUC(label, pred):
     return (a - m * (m+1)) / (m * n)
 
 if __name__ == '__main__':
-    batch_size = 6 * 256
+    batch_size = 6 * 64
     win_size = 5
     data = DataIter('./data/text8', batch_size, win_size)
     print data.vocab_size
 
     network = get_net(win_size = win_size, vocab_size = data.vocab_size)
-    devs = [mx.gpu(i) for i in range(4)]
+    devs = [mx.gpu(i) for i in range(1)]
     model = mx.model.FeedForward(ctx = devs,
                                  symbol = network,
                                  num_epoch = 100,
@@ -147,7 +150,6 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format=head)
     
     model.fit(X = data, eval_metric = AUC,
-              kvstore = 'local_allreduce_device',
               batch_end_callback=mx.callback.Speedometer(batch_size, 50),)
     
     model.save("svd")
