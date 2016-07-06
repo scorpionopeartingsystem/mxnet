@@ -38,7 +38,7 @@ ADD_CFLAGS =
 #---------------------------------------------
 
 # whether use CUDA during compile
-USE_CUDA = 0
+USE_CUDA = 1
 
 # add the path to CUDA library to link and compile flag
 # if you have already add them to environment variable, leave it as NONE
