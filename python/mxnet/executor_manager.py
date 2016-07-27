@@ -80,6 +80,8 @@ def _load_general(data, targets):
             d_src.copyto(d_targets)
         else:
             for slice_idx, d_dst in d_targets:
+                #print d_src[slice_idx].shape
+                #print d_dst.shape
                 d_src[slice_idx].copyto(d_dst)
 
 def _load_data(batch, targets):
@@ -175,6 +177,7 @@ def _bind_exec(sym, ctx, input_shapes, param_names, need_grad=False,
     executor = sym.bind(ctx=ctx, args=arg_arrays, args_grad=grad_arrays,
                         aux_states=aux_arrays,
                         grad_req=grad_req, shared_exec=base_exec)
+    print executor.debug_str()
     return executor
 
 class DataParallelExecutorGroup(object):

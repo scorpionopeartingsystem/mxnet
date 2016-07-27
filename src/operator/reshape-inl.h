@@ -223,7 +223,8 @@ class ReshapeProp : public OperatorProperty {
           src_idx++;
         } else {
           // great than 0, new shape
-          CHECK_EQ(new_size % proposed_dim, 0) << "Illegal dim setting, can't be divided.";
+          CHECK_EQ(new_size % proposed_dim, 0) << "Illegal dim setting, can't be divided."
+              << new_size << "\t" << proposed_dim;
           tmp.push_back(proposed_dim);
           new_size /= proposed_dim;
           // after set manual shape, can't keep same

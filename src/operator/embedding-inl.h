@@ -104,9 +104,9 @@ class EmbeddingOp : public Operator {
         grad_in = scalar<DType>(0.0f);
 #endif
       }
-      if ((grad_out.shape_[0] < grad_out.shape_[1]) && (grad_out.shape_[0] < 512)) {
-        AddTakeGrad(grad_in, data, grad_out);
-      } else {
+      //if ((grad_out.shape_[0] < grad_out.shape_[1]) && (grad_out.shape_[0] < 512)) {
+      //  AddTakeGrad(grad_in, data, grad_out);
+      //} else {
         Tensor<xpu, 2, int> workspace =
           ctx.requested[embedding::kTempSpace].get_space_typed<xpu, 2, int>(
           mshadow::Shape2(2, data.shape_.Size()), s);
@@ -116,7 +116,7 @@ class EmbeddingOp : public Operator {
         original_index = range<int>(0, data.shape_.Size());
         SortByKey(sorted_data, original_index, true);
         AddTakeGradLargeBatch(grad_in, sorted_data, original_index, grad_out);
-      }
+        //}
     } else {
       LOG(FATAL) << "wrong req";
     }
